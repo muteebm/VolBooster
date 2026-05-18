@@ -10,6 +10,9 @@ const THEME_COLORS = {
 };
 
 function App() {
+  const isOSD = window.location.search.includes('osd=true');
+  const [osdData, setOsdData] = useState(null);
+  
   const [activeTab, setActiveTab] = useState('main');
   const [volume, setVolume] = useState(50);
   const [boost, setBoost] = useState(0);
@@ -23,6 +26,7 @@ function App() {
   // Refs for debouncing IPC calls
   const volumeDebounce = useRef(null);
   const boostDebounce = useRef(null);
+  const osdTimer = useRef(null);
   
   // Refs for the Visualizer loop to read live state
   const canvasRef = useRef(null);
@@ -68,8 +72,16 @@ function App() {
           return newVal;
         });
       });
+      
+      if (window.electronAPI.onShowOSD) {
+        window.electronAPI.onShowOSD((data) => {
+          setOsdData(data);
+          if (osdTimer.current) clearTimeout(osdTimer.current);
+          osdTimer.current = setTimeout(() => setOsdData(null), 2000);
+        });
+      }
 
-      setupVisualizer();
+      if (!isOSD) setupVisualizer();
     } else {
       setApoStatus({ installed: false, writable: false, loading: false });
     }
@@ -77,13 +89,15 @@ function App() {
     return () => {
       if (volumeDebounce.current) clearTimeout(volumeDebounce.current);
       if (boostDebounce.current) clearTimeout(boostDebounce.current);
+      if (osdTimer.current) clearTimeout(osdTimer.current);
     };
   }, []);
 
   // Sync theme to CSS
   useEffect(() => {
     document.body.className = `theme-${theme}`;
-  }, [theme]);
+    if (isOSD) document.body.classList.add('osd');
+  }, [theme, isOSD]);
 
   // Save settings whenever they change
   useEffect(() => {
@@ -211,6 +225,24 @@ function App() {
 
   const handleClose = () => { if (window.electronAPI) window.electronAPI.closeWindow(); };
   const handleMinimize = () => { if (window.electronAPI) window.electronAPI.minimizeWindow(); };
+
+  if (isOSD) {
+    if (!osdData) return null;
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+        background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(10px)',
+        border: '1px solid var(--accent-color)', borderRadius: '16px',
+        width: '100%', height: '100%', color: 'white', padding: '10px',
+        boxShadow: '0 0 20px var(--accent-glow)'
+      }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{osdData.title}</div>
+        <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--accent-color)', textShadow: '0 0 10px var(--accent-glow)' }}>
+          {osdData.value}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">

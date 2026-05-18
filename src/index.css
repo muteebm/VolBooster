@@ -46,9 +46,13 @@ body {
   align-items: center;
   height: 100vh;
   overflow: hidden;
-  /* Allows dragging the frameless window */
   -webkit-app-region: drag;
   user-select: none;
+}
+
+body.osd {
+  background: transparent !important;
+  border: none !important;
 }
 
 /* Ensure interactive elements aren't draggable */

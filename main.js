@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, Tray, Menu, globalShortcut, desktopCapturer, Notification } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, Tray, Menu, globalShortcut, desktopCapturer, Notification, screen } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -13,8 +13,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow;
+let osdWindow;
 let tray = null;
 let isQuitting = false;
+let currentVolCache = 50;
 
 // Settings Path
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
@@ -90,12 +92,50 @@ function createWindow() {
   });
 }
 
+function createOSDWindow() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+  const osdWidth = 300;
+  const osdHeight = 100;
+  const margin = 20;
+
+  osdWindow = new BrowserWindow({
+    width: osdWidth,
+    height: osdHeight,
+    x: width - osdWidth - margin,
+    y: height - osdHeight - margin,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    }
+  });
+
+  osdWindow.setIgnoreMouseEvents(true);
+
+  const isDev = process.env.NODE_ENV === 'development';
+  if (isDev) {
+    osdWindow.loadURL('http://localhost:5173/?osd=true');
+  } else {
+    osdWindow.loadFile(path.join(__dirname, 'dist', 'index.html'), { search: 'osd=true' });
+  }
+}
+
 app.whenReady().then(() => {
   createWindow();
+  createOSDWindow();
+  
+  loudness.getVolume().then(v => currentVolCache = v).catch(()=>{});
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+      createOSDWindow();
     }
   });
 
@@ -110,42 +150,33 @@ app.whenReady().then(() => {
     mainWindow.show();
   });
 
-  // Helper for notifications
-  const showNotification = (title, body) => {
-    if (Notification.isSupported()) {
-      new Notification({ title, body, silent: true }).show();
-    }
-  };
-
   // Global Hotkeys
   globalShortcut.register('CommandOrControl+Alt+Up', async () => {
     try {
-      let vol = await loudness.getVolume();
-      vol = Math.min(100, vol + 5);
-      await loudness.setVolume(vol);
-      if (mainWindow) mainWindow.webContents.send('volume-changed', vol);
-      showNotification('VolBooster', `Master Volume: ${vol}%`);
+      currentVolCache = Math.min(100, currentVolCache + 5);
+      loudness.setVolume(currentVolCache).catch(()=>{});
+      if (mainWindow) mainWindow.webContents.send('volume-changed', currentVolCache);
+      if (osdWindow) osdWindow.webContents.send('show-osd', { title: 'Master Volume', value: `${currentVolCache}%` });
     } catch(e){}
   });
 
   globalShortcut.register('CommandOrControl+Alt+Down', async () => {
     try {
-      let vol = await loudness.getVolume();
-      vol = Math.max(0, vol - 5);
-      await loudness.setVolume(vol);
-      if (mainWindow) mainWindow.webContents.send('volume-changed', vol);
-      showNotification('VolBooster', `Master Volume: ${vol}%`);
+      currentVolCache = Math.max(0, currentVolCache - 5);
+      loudness.setVolume(currentVolCache).catch(()=>{});
+      if (mainWindow) mainWindow.webContents.send('volume-changed', currentVolCache);
+      if (osdWindow) osdWindow.webContents.send('show-osd', { title: 'Master Volume', value: `${currentVolCache}%` });
     } catch(e){}
   });
 
   globalShortcut.register('CommandOrControl+Shift+Up', () => {
     if (mainWindow) mainWindow.webContents.send('boost-hotkey', 5);
-    showNotification('VolBooster', `APO Boost Increased`);
+    if (osdWindow) osdWindow.webContents.send('show-osd', { title: 'APO Boost', value: '+ Increased' });
   });
 
   globalShortcut.register('CommandOrControl+Shift+Down', () => {
     if (mainWindow) mainWindow.webContents.send('boost-hotkey', -5);
-    showNotification('VolBooster', `APO Boost Decreased`);
+    if (osdWindow) osdWindow.webContents.send('show-osd', { title: 'APO Boost', value: '- Decreased' });
   });
 });
 

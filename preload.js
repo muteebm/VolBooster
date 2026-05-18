@@ -25,5 +25,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Hotkey Events
   onVolumeChanged: (callback) => ipcRenderer.on('volume-changed', (event, vol) => callback(vol)),
-  onBoostHotkey: (callback) => ipcRenderer.on('boost-hotkey', (event, diff) => callback(diff))
+  onBoostHotkey: (callback) => ipcRenderer.on('boost-hotkey', (event, diff) => callback(diff)),
+  onShowOSD: (callback) => ipcRenderer.on('show-osd', (event, data) => callback(data))
 });

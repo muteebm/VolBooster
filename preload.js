@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Visualizer Source
   getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
 
+  // Per-App Mixer
+  getAudioSessions: () => ipcRenderer.invoke('get-audio-sessions'),
+  setSessionVolume: (data) => ipcRenderer.send('set-session-volume', data),
+  setSessionMute: (data) => ipcRenderer.send('set-session-mute', data),
+
   // Hotkey Events
   onVolumeChanged: (callback) => ipcRenderer.on('volume-changed', (event, vol) => callback(vol)),
   onBoostHotkey: (callback) => ipcRenderer.on('boost-hotkey', (event, diff) => callback(diff))

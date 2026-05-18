@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "loudness": "^0.4.2",
+    "native-sound-mixer": "^3.4.6-win",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
@@ -47,7 +48,8 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "resources/tray_icon.png"
     },
     "nsis": {
       "oneClick": false,

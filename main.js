@@ -1,9 +1,13 @@
-import { app, BrowserWindow, ipcMain, shell, Tray, Menu, globalShortcut, desktopCapturer } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, Tray, Menu, globalShortcut, desktopCapturer, Notification } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import loudness from 'loudness';
 import { execFile } from 'child_process';
+import nativeSoundMixer from 'native-sound-mixer';
+
+const SoundMixer = nativeSoundMixer.default;
+const DeviceType = nativeSoundMixer.DeviceType;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,7 +22,9 @@ const DEFAULT_SETTINGS = {
   masterVolume: 50,
   boost: 0,
   preset: 'Flat',
-  autoStart: false
+  autoStart: false,
+  theme: 'blue',
+  customEQ: [0, 0, 0, 0, 0, 0, 0, 0]
 };
 
 function loadSettings() {
@@ -55,7 +61,8 @@ const EQ_PRESETS = {
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 350,
-    height: 550,
+    height: 750,
+    icon: path.join(__dirname, 'resources', 'tray_icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -103,6 +110,13 @@ app.whenReady().then(() => {
     mainWindow.show();
   });
 
+  // Helper for notifications
+  const showNotification = (title, body) => {
+    if (Notification.isSupported()) {
+      new Notification({ title, body, silent: true }).show();
+    }
+  };
+
   // Global Hotkeys
   globalShortcut.register('CommandOrControl+Alt+Up', async () => {
     try {
@@ -110,6 +124,7 @@ app.whenReady().then(() => {
       vol = Math.min(100, vol + 5);
       await loudness.setVolume(vol);
       if (mainWindow) mainWindow.webContents.send('volume-changed', vol);
+      showNotification('VolBooster', `Master Volume: ${vol}%`);
     } catch(e){}
   });
 
@@ -119,15 +134,18 @@ app.whenReady().then(() => {
       vol = Math.max(0, vol - 5);
       await loudness.setVolume(vol);
       if (mainWindow) mainWindow.webContents.send('volume-changed', vol);
+      showNotification('VolBooster', `Master Volume: ${vol}%`);
     } catch(e){}
   });
 
   globalShortcut.register('CommandOrControl+Shift+Up', () => {
     if (mainWindow) mainWindow.webContents.send('boost-hotkey', 5);
+    showNotification('VolBooster', `APO Boost Increased`);
   });
 
   globalShortcut.register('CommandOrControl+Shift+Down', () => {
     if (mainWindow) mainWindow.webContents.send('boost-hotkey', -5);
+    showNotification('VolBooster', `APO Boost Decreased`);
   });
 });
 
@@ -215,7 +233,7 @@ ipcMain.on('set-boost', async (event, { dbValue, preset }) => {
     const eqRegex = /^GraphicEQ:.*$/im;
     
     const newPreampLine = `Preamp: ${dbValue} dB`;
-    const eqLine = EQ_PRESETS[preset] || '';
+    const eqLine = preset.startsWith('GraphicEQ') ? preset : (EQ_PRESETS[preset] || '');
 
     let lines = content.split('\n');
     let hasPreamp = false;
@@ -254,8 +272,6 @@ ipcMain.on('save-settings', (event, settings) => {
 // Desktop Capturer for Visualizer
 ipcMain.handle('get-desktop-sources', async () => {
   const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] });
-  // We just need a source to get system audio. 
-  // Typically capturing the entire screen ('screen:0:0') gives loopback audio.
   return sources[0]?.id;
 });
 
@@ -280,4 +296,66 @@ ipcMain.on('close-window', (event) => {
 ipcMain.on('minimize-window', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (win) win.minimize();
+});
+
+// --- Per-App Volume Mixer IPC ---
+ipcMain.handle('get-audio-sessions', () => {
+  try {
+    const sessionsMap = new Map();
+    
+    SoundMixer.devices.forEach(device => {
+      // Only care about render devices
+      if (device.type !== DeviceType.RENDER && device.type !== DeviceType.ALL) return;
+      
+      device.sessions.forEach(session => {
+        let name = session.name || '';
+        if (!name) return;
+        
+        // Clean up the name e.g. "opera" -> "Opera", "chrome.exe" -> "Chrome"
+        if (name.toLowerCase().endsWith('.exe')) {
+          name = name.substring(0, name.length - 4);
+        }
+        name = name.charAt(0).toUpperCase() + name.slice(1);
+        
+        if (name === 'System Sounds') return;
+        
+        // Deduplicate sessions from the same app (in case of multiple streams)
+        if (!sessionsMap.has(session.appName)) {
+          sessionsMap.set(session.appName, {
+            id: session.appName,
+            name: name,
+            volume: Math.round(session.volume * 100),
+            mute: session.mute
+          });
+        }
+      });
+    });
+    
+    return Array.from(sessionsMap.values());
+  } catch (e) {
+    console.error('Error fetching audio sessions:', e);
+    return [];
+  }
+});
+
+ipcMain.on('set-session-volume', (event, { id, volume }) => {
+  try {
+    SoundMixer.devices.forEach(device => {
+      const session = device.sessions.find(s => s.appName === id);
+      if (session) {
+        session.volume = volume / 100;
+      }
+    });
+  } catch (e) {}
+});
+
+ipcMain.on('set-session-mute', (event, { id, mute }) => {
+  try {
+    SoundMixer.devices.forEach(device => {
+      const session = device.sessions.find(s => s.appName === id);
+      if (session) {
+        session.mute = mute;
+      }
+    });
+  } catch (e) {}
 });

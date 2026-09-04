@@ -49,6 +49,9 @@
       "resources/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "resources/**/*.exe"
+    ],
     "win": {
       "target": "nsis",
       "icon": "resources/icon.ico"

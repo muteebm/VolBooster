@@ -20,6 +20,16 @@ const ICON_PNG = path.join(__dirname, 'resources', 'icon.png');
 const ICON_ICO = path.join(__dirname, 'resources', 'icon.ico');
 const APP_ICON = fs.existsSync(ICON_ICO) ? ICON_ICO : ICON_PNG;
 
+function packagedResource(...parts) {
+  const inside = path.join(__dirname, ...parts);
+  if (!app.isPackaged) return inside;
+  const unpacked = inside.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`);
+  if (unpacked !== inside && fs.existsSync(unpacked)) return unpacked;
+  const extra = path.join(process.resourcesPath, ...parts);
+  if (fs.existsSync(extra)) return extra;
+  return inside;
+}
+
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID);
 }
@@ -764,7 +774,7 @@ ipcMain.on('open-external', (event, url) => {
 });
 
 ipcMain.on('install-apo', () => {
-  const installerPath = path.join(__dirname, 'resources', 'EqualizerAPO64.exe');
+  const installerPath = packagedResource('resources', 'EqualizerAPO64.exe');
   execFile(installerPath, (error) => {
     if (error) console.error('Failed to launch Equalizer APO installer:', error);
   });

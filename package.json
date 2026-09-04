@@ -1,16 +1,17 @@
 {
   "name": "volbooster",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev": "node scripts/set-electron-icon.mjs && concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "build": "vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "loudness": "^0.4.2",
     "native-sound-mixer": "^3.4.6-win",
     "react": "^19.2.6",
@@ -29,14 +30,15 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "rcedit": "^5.0.2",
     "vite": "^8.0.12",
     "wait-on": "^9.0.10"
   },
-  "author": "VolBooster Contributor",
-  "description": "Windows Volume Booster & Equalizer",
+  "author": "Headroom",
+  "description": "Windows system volume, EQ, and gain control",
   "build": {
     "appId": "com.volbooster.pro",
-    "productName": "VolBooster Pro",
+    "productName": "Headroom",
     "directories": {
       "output": "release"
     },
@@ -49,13 +51,20 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "resources/tray_icon.png"
+      "icon": "resources/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
+      "shortcutName": "Headroom",
+      "uninstallDisplayName": "Headroom",
       "runAfterFinish": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "muteebm",
+      "repo": "VolBooster"
     }
   }
 }
